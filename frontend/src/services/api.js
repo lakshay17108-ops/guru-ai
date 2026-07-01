@@ -7,7 +7,7 @@
  * Base URL is configurable via VITE_API_URL env var (defaults to localhost:5000).
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5000';
 
 /**
  * Generate a structured learning path for the given topic.

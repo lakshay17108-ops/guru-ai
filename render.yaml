@@ -1,0 +1,24 @@
+# render.yaml — One-click deploy for Render
+# Docs: https://docs.render.com/blueprint-spec
+
+services:
+  - type: web
+    name: guru-ai
+    runtime: python
+    buildCommand: "chmod +x build.sh && ./build.sh"
+    startCommand: "cd backend && gunicorn run:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true      # Render auto-generates a secure random string
+      - key: GOOGLE_API_KEY
+        sync: false               # You'll set this manually in the dashboard
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
+      - key: USE_MOCK
+        value: "false"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: NODE_VERSION
+        value: "20.18.0"

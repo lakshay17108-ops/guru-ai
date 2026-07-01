@@ -9,10 +9,16 @@ Why a factory pattern?
 
 import os
 
-from flask import Flask
+from flask import Flask, send_from_directory
 from flask_cors import CORS
 
 from app.config import config_by_name
+
+# Path to the React frontend build output
+FRONTEND_DIST = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    '..', 'frontend', 'dist'
+)
 
 
 def create_app(config_name: str | None = None) -> Flask:
@@ -31,7 +37,8 @@ def create_app(config_name: str | None = None) -> Flask:
 
     # Enable CORS for all /api/* routes — the React dev server runs on
     # a different port (5173) and needs cross-origin access.
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+    CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
 
     # --- Register Blueprints ---
     from app.routes.learning_path import learning_path_bp
@@ -42,4 +49,17 @@ def create_app(config_name: str | None = None) -> Flask:
     def health_check():
         return {"status": "healthy", "service": "learning-path-generator"}
 
+    # --- Serve React frontend in production ---
+    # Only active when the frontend/dist folder exists (i.e., after build)
+    if os.path.isdir(FRONTEND_DIST):
+        @app.route('/', defaults={'path': ''})
+        @app.route('/<path:path>')
+        def serve_frontend(path):
+            """Serve React app; fall back to index.html for client-side routing."""
+            file_path = os.path.join(FRONTEND_DIST, path)
+            if path and os.path.isfile(file_path):
+                return send_from_directory(FRONTEND_DIST, path)
+            return send_from_directory(FRONTEND_DIST, 'index.html')
+
     return app
+
