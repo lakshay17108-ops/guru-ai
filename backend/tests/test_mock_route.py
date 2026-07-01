@@ -1,0 +1,142 @@
+"""
+Smoke tests for the mock /api/generate-path endpoint.
+
+These tests verify:
+  1. The mock endpoint returns 200 with valid JSON.
+  2. The response body conforms to the LearningPath Pydantic schema.
+  3. Error cases return appropriate status codes and messages.
+"""
+
+import json
+import pytest
+
+from app import create_app
+from app.models.schemas import LearningPath
+
+
+@pytest.fixture
+def client():
+    """Create a test client using the testing config."""
+    app = create_app("testing")
+    with app.test_client() as client:
+        yield client
+
+
+class TestGeneratePath:
+    """Tests for POST /api/generate-path."""
+
+    def test_successful_generation(self, client):
+        """A valid request should return 200 and a schema-compliant body."""
+        response = client.post(
+            "/api/generate-path",
+            json={"topic": "Machine Learning", "difficulty": "beginner"},
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+
+        # Verify the response deserializes into a valid LearningPath
+        validated = LearningPath(**data)
+        assert validated.topic == "Machine Learning"
+        assert validated.difficulty == "beginner"
+        assert len(validated.curriculum) >= 1
+
+    def test_response_has_all_required_fields(self, client):
+        """Every field in the schema must be present in the response."""
+        response = client.post(
+            "/api/generate-path",
+            json={"topic": "Python", "difficulty": "intermediate"},
+        )
+
+        data = response.get_json()
+        # Top-level fields
+        assert "topic" in data
+        assert "estimated_time" in data
+        assert "difficulty" in data
+        assert "curriculum" in data
+
+        # Drill into the first milestone
+        first_phase = data["curriculum"][0]
+        assert "phase" in first_phase
+        assert "phase_title" in first_phase
+        assert "milestones" in first_phase
+
+        first_milestone = first_phase["milestones"][0]
+        assert "milestone_id" in first_milestone
+        assert "title" in first_milestone
+        assert "objectives" in first_milestone
+        assert "suggested_queries" in first_milestone
+        assert "resources" in first_milestone
+        assert "milestone_project" in first_milestone
+
+    def test_default_difficulty(self, client):
+        """Omitting difficulty should default to 'beginner'."""
+        response = client.post(
+            "/api/generate-path",
+            json={"topic": "Data Science"},
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["difficulty"] == "beginner"
+
+    def test_missing_topic_returns_400(self, client):
+        """A request without 'topic' should return 400."""
+        response = client.post(
+            "/api/generate-path",
+            json={"difficulty": "advanced"},
+        )
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "error" in data
+
+    def test_empty_topic_returns_400(self, client):
+        """An empty string topic should return 400."""
+        response = client.post(
+            "/api/generate-path",
+            json={"topic": "   ", "difficulty": "beginner"},
+        )
+
+        assert response.status_code == 400
+
+    def test_invalid_difficulty_returns_400(self, client):
+        """An unrecognized difficulty level should return 400."""
+        response = client.post(
+            "/api/generate-path",
+            json={"topic": "Rust", "difficulty": "godmode"},
+        )
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "valid_options" in data
+
+    def test_no_json_body_returns_400(self, client):
+        """A request with no JSON body should return 400."""
+        response = client.post(
+            "/api/generate-path",
+            data="not json",
+            content_type="text/plain",
+        )
+
+        assert response.status_code == 400
+
+    def test_empty_json_body_returns_400(self, client):
+        """An empty JSON object should return 400."""
+        response = client.post(
+            "/api/generate-path",
+            json={},
+        )
+
+        assert response.status_code == 400
+
+
+class TestHealthCheck:
+    """Tests for GET /api/health."""
+
+    def test_health_check(self, client):
+        """The health endpoint should return 200 with status healthy."""
+        response = client.get("/api/health")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["status"] == "healthy"

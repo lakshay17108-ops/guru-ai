@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   Base Layer — Global defaults
+   ============================================ */
+@layer base {
+  body {
+    @apply bg-background text-body font-sans antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-heading font-semibold tracking-tight;
+  }
+}
+
+/* ============================================
+   Components Layer — Reusable utility classes
+   ============================================ */
+@layer components {
+  .module-card {
+    @apply bg-surface border border-border rounded-lg shadow-card p-6 transition-all;
+  }
+
+  .btn-primary {
+    @apply bg-accent text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-accent-hover transition-colors;
+  }
+
+  .btn-secondary {
+    @apply bg-white border border-border text-body px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors;
+  }
+}
+
+/* ============================================
+   Utilities Layer — Custom animations
+   ============================================ */
+@layer utilities {
+  .animate-fadeIn {
+    animation: fadeIn 0.3s ease-out;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
