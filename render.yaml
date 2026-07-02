@@ -13,9 +13,15 @@ services:
       - key: SECRET_KEY
         generateValue: true      # Render auto-generates a secure random string
       - key: GOOGLE_API_KEY
-        sync: false               # You'll set this manually in the dashboard
+        sync: false               # You can keep this empty if using OpenRouter
       - key: GEMINI_MODEL
         value: gemini-2.0-flash
+      - key: LLM_PROVIDER
+        value: openrouter
+      - key: OPENROUTER_API_KEY
+        sync: false               # Set this manually in the Render dashboard
+      - key: OPENROUTER_MODEL
+        value: meta-llama/llama-3.1-8b-instruct:free
       - key: USE_MOCK
         value: "false"
       - key: PYTHON_VERSION

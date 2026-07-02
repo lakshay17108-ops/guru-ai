@@ -8,6 +8,7 @@ Architecture note:
 """
 
 import logging
+import os
 
 from flask import Blueprint, current_app, jsonify, request
 from pydantic import ValidationError
@@ -247,8 +248,16 @@ def generate_learning_path():
             }), 500
     else:
         # Real LLM mode
-        api_key = current_app.config.get("GOOGLE_API_KEY", "")
-        model_name = current_app.config.get("GEMINI_MODEL", "gemini-2.0-flash")
+        provider = os.getenv("LLM_PROVIDER", current_app.config.get("LLM_PROVIDER", "gemini")).lower()
+        if provider == "openrouter":
+            api_key = os.getenv("OPENROUTER_API_KEY", current_app.config.get("OPENROUTER_API_KEY", ""))
+            model_name = os.getenv(
+                "OPENROUTER_MODEL",
+                current_app.config.get("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free"),
+            )
+        else:
+            api_key = os.getenv("GOOGLE_API_KEY", current_app.config.get("GOOGLE_API_KEY", ""))
+            model_name = os.getenv("GEMINI_MODEL", current_app.config.get("GEMINI_MODEL", "gemini-2.0-flash"))
 
         try:
             validated_path = generate_learning_path_llm(

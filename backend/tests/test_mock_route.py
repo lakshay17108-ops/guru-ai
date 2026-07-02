@@ -206,6 +206,54 @@ class TestGeneratePath:
         assert result.topic == "Python"
         assert result.difficulty == "beginner"
 
+    def test_route_uses_openrouter_credentials_when_enabled(self, monkeypatch):
+        """The route should forward OpenRouter credentials when that provider is selected."""
+        captured = {}
+
+        def fake_generate_learning_path_llm(*, topic, difficulty, api_key, model_name, **kwargs):
+            captured["api_key"] = api_key
+            captured["model_name"] = model_name
+            return LearningPath(**{
+                "topic": topic,
+                "estimated_time": "4 weeks",
+                "difficulty": difficulty,
+                "curriculum": [
+                    {
+                        "phase": 1,
+                        "phase_title": "Basics",
+                        "milestones": [
+                            {
+                                "milestone_id": "P1_M1",
+                                "title": "Intro",
+                                "objectives": ["Learn basics"],
+                                "suggested_queries": ["intro"],
+                                "resources": [{"resource_title": "Docs", "url": "https://example.com"}],
+                                "milestone_project": {"project_title": "Hello", "description": "Say hi"},
+                            }
+                        ],
+                    }
+                ],
+            })
+
+        monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+        monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-key")
+        monkeypatch.setenv("OPENROUTER_MODEL", "openrouter-model")
+        monkeypatch.setattr(
+            "app.routes.learning_path.generate_learning_path_llm",
+            fake_generate_learning_path_llm,
+        )
+
+        app = create_app("development")
+        with app.test_client() as client:
+            response = client.post(
+                "/api/generate-path",
+                json={"topic": "Python", "difficulty": "beginner"},
+            )
+
+        assert response.status_code == 200
+        assert captured.get("api_key") == "openrouter-key"
+        assert captured.get("model_name") == "openrouter-model"
+
     def test_empty_json_body_returns_400(self, client):
         """An empty JSON object should return 400."""
         response = client.post(

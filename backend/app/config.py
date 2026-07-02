@@ -12,6 +12,9 @@ class BaseConfig:
     # LLM settings
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
     GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
+    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+    OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
     USE_MOCK = os.getenv("USE_MOCK", "false").lower() == "true"
 
 
