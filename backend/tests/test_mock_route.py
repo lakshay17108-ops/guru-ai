@@ -12,7 +12,7 @@ import pytest
 
 from app import create_app
 from app.models.schemas import LearningPath
-from app.services.llm_service import LLMRateLimitError
+from app.services.llm_service import LLMRateLimitError, generate_learning_path_llm
 
 
 @pytest.fixture
@@ -143,6 +143,68 @@ class TestGeneratePath:
         validated = LearningPath(**data)
         assert validated.topic == "React"
         assert validated.difficulty == "beginner"
+
+    def test_openrouter_provider_returns_structured_learning_path(self, monkeypatch):
+        """The backend should support OpenRouter as an alternative free LLM provider."""
+
+        class FakeResponse:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps(self._payload).encode("utf-8")
+
+        def fake_urlopen(request, timeout=60):
+            payload = {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps({
+                                "topic": "Python",
+                                "estimated_time": "4 weeks",
+                                "difficulty": "beginner",
+                                "curriculum": [
+                                    {
+                                        "phase": 1,
+                                        "phase_title": "Basics",
+                                        "milestones": [
+                                            {
+                                                "milestone_id": "P1_M1",
+                                                "title": "Intro",
+                                                "objectives": ["Learn Python basics"],
+                                                "suggested_queries": ["Python basics"],
+                                                "resources": [{"resource_title": "Python docs", "url": "https://www.python.org/"}],
+                                                "milestone_project": {"project_title": "Hello World", "description": "Write a small script"},
+                                            }
+                                        ],
+                                    }
+                                ],
+                            })
+                        }
+                    }
+                ]
+            }
+            return FakeResponse(payload)
+
+        monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+        monkeypatch.setattr("app.services.llm_service.urlopen", fake_urlopen)
+
+        result = generate_learning_path_llm(
+            topic="Python",
+            difficulty="beginner",
+            api_key="test-key",
+            model_name="meta-llama/llama-3.1-8b-instruct:free",
+        )
+
+        assert result.topic == "Python"
+        assert result.difficulty == "beginner"
 
     def test_empty_json_body_returns_400(self, client):
         """An empty JSON object should return 400."""

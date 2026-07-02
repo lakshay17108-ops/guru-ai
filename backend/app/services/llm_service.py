@@ -10,8 +10,11 @@ This eliminates manual JSON parsing and the entire class of
 "LLM returned malformed JSON" errors.
 """
 
+import json
 import logging
+import os
 import time
+from urllib.request import Request, urlopen
 
 from google import genai
 from google.genai import types
@@ -62,11 +65,57 @@ class LLMRateLimitError(LLMServiceError):
     pass
 
 
+def _call_openrouter(
+    topic: str,
+    difficulty: str,
+    api_key: str,
+    model_name: str,
+) -> LearningPath:
+    """Call OpenRouter as a free/low-cost alternative provider."""
+    if not api_key:
+        raise APIKeyMissingError("OpenRouter API key is not configured.")
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model_name,
+        "messages": [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": USER_PROMPT_TEMPLATE.format(topic=topic, difficulty=difficulty),
+            },
+        ],
+        "response_format": {"type": "json_object"},
+    }
+
+    request = Request(
+        "https://openrouter.ai/api/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    with urlopen(request, timeout=60) as response:
+        body = json.loads(response.read().decode("utf-8"))
+
+    content = body.get("choices", [{}])[0].get("message", {}).get("content", "")
+    if not content:
+        raise LLMServiceError("OpenRouter returned an empty response")
+
+    raw_data = json.loads(content)
+    return LearningPath(**raw_data)
+
+
 def generate_learning_path_llm(
     topic: str,
     difficulty: str,
     api_key: str,
-    model_name: str = "gemini-2.0-flash",
+    model_name: str | None = None,
     max_retries: int = 1,
 ) -> LearningPath:
     """
@@ -88,6 +137,13 @@ def generate_learning_path_llm(
         LLMRateLimitError: If rate limited by the API
         LLMServiceError: For any other LLM-related failure
     """
+    provider = os.getenv("LLM_PROVIDER", "gemini").lower()
+    if model_name is None:
+        model_name = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
+
+    if provider == "openrouter":
+        return _call_openrouter(topic, difficulty, api_key, model_name)
+
     if not api_key:
         raise APIKeyMissingError(
             "Google API key is not configured. "
