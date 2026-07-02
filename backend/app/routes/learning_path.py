@@ -264,14 +264,14 @@ def generate_learning_path():
             }), 503
         except LLMTimeoutError as e:
             logger.warning(f"LLM timeout: {e}")
-            return jsonify({
-                "error": "The AI took too long to respond. Please try again.",
-            }), 504
+            logger.info("Falling back to mock learning path after timeout")
+            validated_path = _build_mock_learning_path(topic, difficulty)
+            validated_path = LearningPath(**validated_path)
         except LLMRateLimitError as e:
             logger.warning(f"Rate limited: {e}")
-            return jsonify({
-                "error": "Too many requests. Please wait a moment and try again.",
-            }), 429
+            logger.info("Falling back to mock learning path after rate limit")
+            validated_path = _build_mock_learning_path(topic, difficulty)
+            validated_path = LearningPath(**validated_path)
         except LLMServiceError as e:
             logger.error(f"LLM service error: {e}")
             return jsonify({

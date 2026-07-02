@@ -12,6 +12,7 @@ import pytest
 
 from app import create_app
 from app.models.schemas import LearningPath
+from app.services.llm_service import LLMRateLimitError
 
 
 @pytest.fixture
@@ -120,6 +121,28 @@ class TestGeneratePath:
         )
 
         assert response.status_code == 400
+
+    def test_falls_back_to_mock_when_llm_is_rate_limited(self, client, monkeypatch):
+        """A transient LLM failure should still return a valid learning path."""
+
+        def raise_rate_limit(*args, **kwargs):
+            raise LLMRateLimitError("rate limited")
+
+        monkeypatch.setattr(
+            "app.routes.learning_path.generate_learning_path_llm",
+            raise_rate_limit,
+        )
+
+        response = client.post(
+            "/api/generate-path",
+            json={"topic": "React", "difficulty": "beginner"},
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        validated = LearningPath(**data)
+        assert validated.topic == "React"
+        assert validated.difficulty == "beginner"
 
     def test_empty_json_body_returns_400(self, client):
         """An empty JSON object should return 400."""
