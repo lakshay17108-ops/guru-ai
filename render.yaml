@@ -5,7 +5,7 @@ services:
   - type: web
     name: guru-ai
     runtime: python
-    buildCommand: "chmod +x build.sh && ./build.sh"
+    buildCommand: "bash ./build.sh"
     startCommand: "cd backend && gunicorn run:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
     envVars:
       - key: FLASK_ENV
