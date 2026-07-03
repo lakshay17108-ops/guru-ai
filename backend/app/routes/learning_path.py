@@ -27,12 +27,115 @@ logger = logging.getLogger(__name__)
 learning_path_bp = Blueprint("learning_path", __name__)
 
 
+from urllib.parse import quote_plus
+
+
+# Domains that are clearly fake/placeholder — we replace these with real URLs
+_FAKE_DOMAINS = {
+    "example.com", "example.org", "example.net",
+    "placeholder.com", "yoursite.com", "website.com",
+    "domain.com", "site.com", "test.com",
+}
+
+
+def _real_search_urls(topic: str) -> list[dict]:
+    """
+    Return a set of guaranteed-real URLs for any topic.
+    Uses search/index pages of major learning platforms so they always resolve.
+    """
+    q = quote_plus(topic)
+    return [
+        {
+            "resource_title": f"{topic} — YouTube Tutorials",
+            "url": f"https://www.youtube.com/results?search_query={q}+tutorial",
+        },
+        {
+            "resource_title": f"{topic} — freeCodeCamp Guide",
+            "url": f"https://www.freecodecamp.org/news/search/?query={q}",
+        },
+        {
+            "resource_title": f"{topic} — Coursera Courses",
+            "url": f"https://www.coursera.org/search?query={q}",
+        },
+        {
+            "resource_title": f"{topic} — GitHub Topics & Projects",
+            "url": f"https://github.com/topics/{quote_plus(topic.lower().replace(' ', '-'))}",
+        },
+        {
+            "resource_title": f"{topic} — W3Schools / MDN Reference",
+            "url": f"https://developer.mozilla.org/en-US/search?q={q}",
+        },
+    ]
+
+
+def _sanitise_urls(path_dict: dict, topic: str) -> dict:
+    """
+    Walk the learning path dict and replace any fake/placeholder URLs
+    with real search links. Also fixes youtube.com/example style URLs.
+    Returns the cleaned dict (mutates in place for efficiency).
+    """
+    real_urls = _real_search_urls(topic)
+    url_pool = list(real_urls)  # rotating pool of real URLs
+    pool_idx = 0
+
+    def _is_fake(url: str) -> bool:
+        if not url or not url.startswith("http"):
+            return True
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower().replace("www.", "")
+            # Fake domain check
+            if domain in _FAKE_DOMAINS:
+                return True
+            # Fake path check — example.com/intro style, or youtube.com/example
+            path = parsed.path.lower()
+            fake_paths = ["/example", "/intro", "/setup", "/tutorial",
+                          "/advanced", "/best-practices", "/resource"]
+            if any(path == fp or path.startswith(fp + "/") for fp in fake_paths):
+                return True
+        except Exception:
+            return True
+        return False
+
+    nonlocal_pool = {"idx": 0}
+
+    def _next_real_url() -> dict:
+        entry = url_pool[nonlocal_pool["idx"] % len(url_pool)]
+        nonlocal_pool["idx"] += 1
+        return entry
+
+    for phase in path_dict.get("curriculum", []):
+        for milestone in phase.get("milestones", []):
+            cleaned = []
+            for res in milestone.get("resources", []):
+                if _is_fake(res.get("url", "")):
+                    replacement = _next_real_url()
+                    cleaned.append({
+                        "resource_title": res.get("resource_title", replacement["resource_title"]),
+                        "url": replacement["url"],
+                    })
+                else:
+                    cleaned.append(res)
+            milestone["resources"] = cleaned
+
+    return path_dict
+
+
 def _build_mock_learning_path(topic: str, difficulty: str) -> dict:
     """
     Return a hardcoded learning path that passes Pydantic validation.
-
+    Uses real, working search URLs so all resource links are clickable.
     Kept as a fallback for testing and when USE_MOCK=true.
     """
+    q = quote_plus(topic)
+    yt = f"https://www.youtube.com/results?search_query={q}+tutorial"
+    yt_adv = f"https://www.youtube.com/results?search_query={q}+advanced+tutorial"
+    fcc = f"https://www.freecodecamp.org/news/search/?query={q}"
+    coursera = f"https://www.coursera.org/search?query={q}"
+    github = f"https://github.com/topics/{quote_plus(topic.lower().replace(' ', '-'))}"
+    mdn = f"https://developer.mozilla.org/en-US/search?q={q}"
+
     return {
         "topic": topic,
         "estimated_time": "6 weeks",
@@ -57,12 +160,12 @@ def _build_mock_learning_path(topic: str, difficulty: str) -> dict:
                         ],
                         "resources": [
                             {
-                                "resource_title": f"Introduction to {topic} — Official Docs",
-                                "url": "https://example.com/intro",
+                                "resource_title": f"{topic} Crash Course — YouTube",
+                                "url": yt,
                             },
                             {
-                                "resource_title": f"{topic} Crash Course (YouTube)",
-                                "url": "https://youtube.com/example",
+                                "resource_title": f"{topic} Guide — freeCodeCamp",
+                                "url": fcc,
                             },
                         ],
                         "milestone_project": {
@@ -88,8 +191,12 @@ def _build_mock_learning_path(topic: str, difficulty: str) -> dict:
                         ],
                         "resources": [
                             {
-                                "resource_title": "Environment Setup Guide",
-                                "url": "https://example.com/setup",
+                                "resource_title": f"{topic} Setup Guide — YouTube",
+                                "url": f"https://www.youtube.com/results?search_query={q}+setup+guide",
+                            },
+                            {
+                                "resource_title": f"{topic} Courses — Coursera",
+                                "url": coursera,
                             },
                         ],
                         "milestone_project": {
@@ -121,12 +228,12 @@ def _build_mock_learning_path(topic: str, difficulty: str) -> dict:
                         ],
                         "resources": [
                             {
-                                "resource_title": f"Hands-On {topic} Tutorial",
-                                "url": "https://example.com/tutorial",
+                                "resource_title": f"{topic} Project Tutorial — YouTube",
+                                "url": f"https://www.youtube.com/results?search_query={q}+project+tutorial",
                             },
                             {
-                                "resource_title": f"{topic} Best Practices Guide",
-                                "url": "https://example.com/best-practices",
+                                "resource_title": f"{topic} Open Source Projects — GitHub",
+                                "url": github,
                             },
                         ],
                         "milestone_project": {
@@ -158,8 +265,12 @@ def _build_mock_learning_path(topic: str, difficulty: str) -> dict:
                         ],
                         "resources": [
                             {
-                                "resource_title": f"Advanced {topic} Patterns",
-                                "url": "https://example.com/advanced",
+                                "resource_title": f"Advanced {topic} — YouTube",
+                                "url": yt_adv,
+                            },
+                            {
+                                "resource_title": f"{topic} Documentation & Reference — MDN",
+                                "url": mdn,
                             },
                         ],
                         "milestone_project": {
@@ -304,5 +415,8 @@ def generate_learning_path():
                 "details": e.errors(),
             }), 422
 
-    # --- 4. Return validated response ---
-    return jsonify(validated_path.model_dump()), 200
+    # --- 4. Sanitise any fake/placeholder URLs (catches LLM hallucinations) ---
+    clean_dict = _sanitise_urls(validated_path.model_dump(), topic)
+
+    # --- 5. Return validated response ---
+    return jsonify(clean_dict), 200
