@@ -269,27 +269,29 @@ def generate_learning_path():
         except APIKeyMissingError as e:
             logger.error(f"API key missing: {e}")
             return jsonify({
-                "error": "AI service is not configured. Please set your Google API key.",
+                "error": "The AI service API key is invalid or not configured. "
+                         "Please check OPENROUTER_API_KEY in the Render dashboard.",
             }), 503
         except LLMTimeoutError as e:
             logger.warning(f"LLM timeout: {e}")
-            logger.info("Falling back to mock learning path after timeout")
-            validated_path = _build_mock_learning_path(topic, difficulty)
-            validated_path = LearningPath(**validated_path)
+            return jsonify({
+                "error": "The AI took too long to respond. Please try again in a moment.",
+            }), 504
         except LLMRateLimitError as e:
             logger.warning(f"Rate limited: {e}")
-            logger.info("Falling back to mock learning path after rate limit")
-            validated_path = _build_mock_learning_path(topic, difficulty)
-            validated_path = LearningPath(**validated_path)
+            return jsonify({
+                "error": "You've hit the rate limit for the free AI model. "
+                         "Please wait a minute and try again.",
+            }), 429
         except LLMServiceError as e:
             logger.error(f"LLM service error: {e}")
             return jsonify({
-                "error": "Failed to generate learning path. Please try again.",
+                "error": str(e) if str(e) else "Failed to generate learning path. Please try again.",
             }), 500
         except Exception as e:
             logger.error(f"Unexpected error in LLM generation: {e}", exc_info=True)
             return jsonify({
-                "error": "An unexpected error occurred. Please try again.",
+                "error": "An unexpected server error occurred. Please try again.",
             }), 500
 
         # --- 3. Re-validate with Pydantic (safety net) ---
