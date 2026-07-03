@@ -278,11 +278,9 @@ def generate_learning_path():
                 "error": "The AI took too long to respond. Please try again in a moment.",
             }), 504
         except LLMRateLimitError as e:
-            logger.warning(f"Rate limited: {e}")
-            return jsonify({
-                "error": "You've hit the rate limit for the free AI model. "
-                         "Please wait a minute and try again.",
-            }), 429
+            logger.warning(f"All models rate limited, falling back to mock: {e}")
+            raw_mock = _build_mock_learning_path(topic, difficulty)
+            validated_path = LearningPath(**raw_mock)
         except LLMServiceError as e:
             logger.error(f"LLM service error: {e}")
             return jsonify({

@@ -82,6 +82,16 @@ Required JSON structure:
   ]
 }"""
 
+# Ordered list of free models to try in sequence.
+# If the primary model is rate-limited or unavailable, the next is tried.
+FREE_MODELS = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemma-2-9b-it:free",
+    "mistralai/mistral-7b-instruct:free",
+    "qwen/qwen3-8b:free",
+]
+
+
 
 class LLMServiceError(Exception):
     """Base exception for LLM service errors."""
@@ -103,13 +113,13 @@ class LLMRateLimitError(LLMServiceError):
     pass
 
 
-def _call_openrouter(
+def _call_single_openrouter_model(
     topic: str,
     difficulty: str,
     api_key: str,
     model_name: str,
 ) -> LearningPath:
-    """Call OpenRouter as a free/low-cost alternative provider."""
+    """Call a single OpenRouter model. Raises specific exceptions on failure."""
     if not api_key:
         raise APIKeyMissingError("OpenRouter API key is not configured.")
 
@@ -227,15 +237,60 @@ def _call_openrouter(
     try:
         return LearningPath(**raw_data)
     except ValidationError as e:
-        logger.error(f"OpenRouter response failed schema validation: {e}")
+        logger.error(f"OpenRouter [{model_name}] response failed schema validation: {e}")
         raise LLMServiceError(
             "The AI response did not match the expected structure. Please try again."
         ) from e
     except (TypeError, KeyError) as e:
-        logger.error(f"OpenRouter response had unexpected structure: {e}")
+        logger.error(f"OpenRouter [{model_name}] response had unexpected structure: {e}")
         raise LLMServiceError(
             "The AI returned an unexpected response structure. Please try again."
         ) from e
+
+
+def _call_openrouter(
+    topic: str,
+    difficulty: str,
+    api_key: str,
+    model_name: str,
+) -> LearningPath:
+    """
+    Call OpenRouter with automatic model cascade.
+
+    Tries `model_name` first, then falls through FREE_MODELS in order.
+    Skips a model on 429 (rate limit) or 404 (model removed).
+    Raises LLMRateLimitError only if every model in the cascade is exhausted.
+    """
+    if not api_key:
+        raise APIKeyMissingError("OpenRouter API key is not configured.")
+
+    # Build the ordered list: requested model first, then the rest of the fallbacks
+    primary = model_name or FREE_MODELS[0]
+    cascade = [primary] + [m for m in FREE_MODELS if m != primary]
+
+    last_error: Exception | None = None
+    for model in cascade:
+        try:
+            logger.info(f"Trying OpenRouter model: {model}")
+            return _call_single_openrouter_model(topic, difficulty, api_key, model)
+        except (LLMRateLimitError, LLMServiceError) as e:
+            # On 404 (wrapped as LLMServiceError) or 429, try the next model
+            err_str = str(e).lower()
+            if "rate limit" in err_str or "429" in err_str or "not found" in err_str or "404" in err_str:
+                logger.warning(f"Model {model} unavailable ({e}), trying next fallback...")
+                last_error = e
+                continue
+            # Other LLMServiceError (bad JSON, schema mismatch, etc.) — don't cascade
+            raise
+        except (APIKeyMissingError, LLMTimeoutError):
+            # Auth and timeout errors won't be fixed by switching models
+            raise
+
+    # All models exhausted
+    raise LLMRateLimitError(
+        "All free AI models are currently rate-limited. "
+        "Showing a sample learning path instead."
+    ) from last_error
 
 
 def generate_learning_path_llm(
