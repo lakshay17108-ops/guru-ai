@@ -160,6 +160,13 @@ def _call_openrouter(
                 "Invalid or unauthorized OpenRouter API key. "
                 "Please check your OPENROUTER_API_KEY in the Render dashboard."
             ) from e
+        if e.code == 404:
+            raise LLMServiceError(
+                f"Model '{model_name}' was not found on OpenRouter. "
+                "The model may have been renamed or removed. "
+                "Update OPENROUTER_MODEL in your Render environment variables "
+                "to a valid free model such as 'meta-llama/llama-3.3-70b-instruct:free'."
+            ) from e
         if e.code == 429:
             raise LLMRateLimitError(
                 "OpenRouter rate limit reached. Please wait a moment and try again."
@@ -260,7 +267,7 @@ def generate_learning_path_llm(
     """
     provider = os.getenv("LLM_PROVIDER", "gemini").lower()
     if model_name is None:
-        model_name = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
+        model_name = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
 
     if provider == "openrouter":
         return _call_openrouter(topic, difficulty, api_key, model_name)
